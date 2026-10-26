@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goodweek Demo — AI Spend & Access Dashboard (Illustrative)</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f7f9;color:#17202a}
+header{background:#111827;color:#fff;padding:20px 24px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;color:#cbd5e1}
+main{max-width:1080px;margin:0 auto;padding:20px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat b{font-size:24px;display:block}.muted{color:#64748b;font-size:13px}
+input,select,button{padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px}button{background:#111827;color:#fff;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
+.flag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}.over{background:#fee2e2;color:#991b1b}.dup{background:#fef3c7;color:#92400e}.inactive{background:#e0e7ff;color:#3730a3}.ok{background:#dcfce7;color:#166534}
+.skel{height:16px;background:#e5e7eb;border-radius:6px;margin:8px 0;animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.5}}
+footer{color:#64748b;font-size:13px;text-align:center;padding:20px}
+@media(max-width:700px){.stats{grid-template-columns:1fr 1fr}table{font-size:13px}}
+</style>
+</head>
+<body>
+<header>
+<h1>AI Spend &amp; Access Dashboard</h1>
+<p>Illustrative admin view for an SMB — visibility and control over who uses which AI model, in which Space, and at what cost.</p>
+</header>
+<main>
+<div id="loading" class="card"><div class="skel"></div><div class="skel"></div><div class="skel"></div><p class="muted">Loading demo data…</p></div>
+<div id="app" style="display:none">
+<div class="card stats" id="stats"></div>
+<div class="card">
+<h2 style="margin-top:0">Admin checklist</h2>
+<div id="checklist"></div>
+<div style="height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:10px"><div id="bar" style="height:100%;background:#111827;width:0%"></div></div>
+<p class="muted" id="progressText"></p>
+</div>
+<div class="card">
+<div class="toolbar">
+<input id="q" placeholder="Search user, Space or model…" style="flex:1;min-width:220px">
+<select id="space"><option value="">All Spaces</option><option>Sales</option><option>HR</option><option>Legal</option><option>Marketing</option></select>
+<select id="flag"><option value="">All flags</option><option value="OVER">Over budget</option><option value="DUP">Duplicate access</option><option value="INACTIVE">Inactive with access</option></select>
+<label><input type="checkbox" id="flaggedOnly"> Flagged only</label>
+<label>Role: <select id="role"><option>Admin</option><option>Viewer</option></select></label>
+<label><input type="checkbox" id="fail"> Simulate API failure</label>
+</div>
+</div>
+<div class="card" id="errorCard" style="display:none"><b>Could not load usage data.</b> <button id="retry">Retry</button></div>
+<div class="card">
+<table><thead><tr><th>User</th><th>Space</th><th>Model</th><th>Usage</th><th>Spend</th><th>Budget</th><th>Flag</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<p class="muted" id="empty" style="display:none">No users match. <button id="reset">Reset filters</button></p>
+<div style="display:flex;gap:8px;align-items:center;margin-top:12px"><button id="prev">Prev</button><span id="pageText" class="muted"></span><button id="next">Next</button></div>
+</div>
+<div class="card" id="detail" style="display:none"></div>
+</div>
+</main>
+<footer>Demo data only — illustrative users, Spaces, models and spend. No real AI models, company data or Goodweek platform integration is used here.</footer>
+<script>
+const data=[
+{id:"U-01",user:"A. Martin",space:"Sales",model:"ChatGPT",usage:4120,spend:96,budget:80,flag:"OVER"},
+{id:"U-02",user:"S. Patel",space:"Sales",model:"Claude",usage:2890,spend:54,budget:80,flag:""},
+{id:"U-03",user:"L. Garcia",space:"HR",model:"Gemini",usage:1780,spend:38,budget:60,flag:""},
+{id:"U-04",user:"J. Kim",space:"HR",model:"ChatGPT",usage:3420,spend:88,budget:60,flag:"OVER"},
+{id:"U-05",user:"R. Dubois",space:"Legal",model:"Mistral",usage:920,spend:22,budget:60,flag:""},
+{id:"U-06",user:"E. Novak",space:"Legal",model:"Claude",usage:2650,spend:61,budget:60,flag:"OVER"},
+{id:"U-07",user:"M. Chen",space:"Marketing",model:"ChatGPT",usage:5210,spend:118,budget:100,flag:"OVER"},
+{id:"U-08",user:"T. Rossi",space:"Marketing",model:"Gemini",usage:1980,spend:41,budget:100,flag:""},
+{id:"U-09",user:"N. Ali",space:"Sales",model:"ChatGPT",usage:1240,spend:29,budget:80,flag:"DUP",note:"Also has Claude access for same Space"},
+{id:"U-10",user:"K. Weber",space:"Sales",model:"Claude",usage:980,spend:24,budget:80,flag:"DUP",note:"Duplicate model access in Sales"},
+{id:"U-11",user:"D. Silva",space:"HR",model:"Gemini",usage:0,spend:0,budget:60,flag:"INACTIVE",note:"No usage in 30 days, access still on"},
+{id:"U-12",user:"P. Moreau",space:"Legal",model:"ChatGPT",usage:3120,spend:74,budget:60,flag:"OVER"},
+{id:"U-13",user:"H. Tanaka",space:"Marketing",model:"Mistral",usage:1430,spend:31,budget:100,flag:""},
+{id:"U-14",user:"V. Lopez",space:"Sales",model:"Gemini",usage:2210,spend:47,budget:80,flag:""},
+{id:"U-15",user:"O. Smith",space:"HR",model:"Claude",usage:1870,spend:39,budget:60,flag:""},
+{id:"U-16",user:"C. Bernard",space:"Legal",model:"Gemini",usage:760,spend:18,budget:60,flag:""},
+{id:"U-17",user:"A. Khan",space:"Marketing",model:"Claude",usage:2980,spend:66,budget:100,flag:""},
+{id:"U-18",user:"F. Laurent",space:"Sales",model:"Mistral",usage:0,spend:0,budget:80,flag:"INACTIVE",note:"No usage in 30 days, access still on"},
+{id:"U-19",user:"G. Evans",space:"HR",model:"ChatGPT",usage:2760,spend:58,budget:60,flag:""},
+{id:"U-20",user:"I. Novak",space:"Marketing",model:"ChatGPT",usage:4320,spend:102,budget:100,flag:"OVER"},
+];
+let state=data.map(d=>({...d,reviewed:false,resolved:false,access:true}));
+let checks=[false,false,false,false,false,false]; const checkLabels=["Review all over-budget users","Resolve duplicate model access","Turn off access for inactive users","Check Space-wise spend vs budget","Confirm no data is used for model training in this demo","Export a summary for the team lead"];
+let page=1, per=8, selected=null, timer=null;
+const $=id=>document.getElementById(id);
+function flagLabel(f){return f==="OVER"?"Over budget":f==="DUP"?"Duplicate access":f==="INACTIVE"?"Inactive with access":"OK"}
+function flagClass(f){return f==="OVER"?"over":f==="DUP"?"dup":f==="INACTIVE"?"inactive":"ok"}
+function filtered(){
+  const q=$("q").value.toLowerCase(), sp=$("space").value, fl=$("flag").value, fo=$("flaggedOnly").checked;
+  return state.filter(d=> (!q||(d.user+" "+d.space+" "+d.model).toLowerCase().includes(q)) && (!sp||d.space===sp) && (!fl||d.flag===fl) && (!fo||d.flag));
+}
+function renderStats(){
+  const f=state, flagged=f.filter(d=>d.flag&&!d.resolved);
+  const spend=f.reduce((s,d)=>s+d.spend,0), atRisk=flagged.reduce((s,d)=>s+d.spend,0);
+  $("stats").innerHTML=`<div><span class="muted">Users</span><b>${f.length}</b></div><div><span class="muted">Flagged</span><b>${flagged.length}</b></div><div><span class="muted">Total spend (demo)</span><b>$${spend}</b></div><div><span class="muted">Spend at risk (flagged)</span><b>$${atRisk}</b></div>`;
+}
+function renderChecks(){
+  $("checklist").innerHTML=checkLabels.map((l,i)=>`<label style="display:block;margin:6px 0"><input type="checkbox" ${checks[i]?"checked":""} onchange="toggleCheck(${i})"> ${l}</label>`).join("");
+  const done=checks.filter(Boolean).length; $("bar").style.width=(done/checkLabels.length*100)+"%"; $("progressText").textContent=done+" of "+checkLabels.length+" done";
+}
+window.toggleCheck=i=>{checks[i]=!checks[i];renderChecks()};
+function render(){
+  if($("fail").checked){$("errorCard").style.display="block";} else {$("errorCard").style.display="none";}
+  renderStats(); renderChecks();
+  const list=filtered(), pages=Math.max(1,Math.ceil(list.length/per)); page=Math.min(page,pages);
+  const slice=list.slice((page-1)*per,page*per);
+  $("rows").innerHTML=slice.map(d=>`<tr><td><b>${d.user}</b><br><span class="muted">${d.id}</span></td><td>${d.space}</td><td>${d.model}</td><td>${d.usage.toLocaleString()}</td><td>$${d.spend}</td><td>$${d.budget}</td><td><span class="flag ${flagClass(d.flag)}">${d.resolved?"Resolved":flagLabel(d.flag)}</span></td><td><button onclick="selectUser('${d.id}')">Review</button></td></tr>`).join("");
+  $("empty").style.display=list.length?"none":"block";
+  $("pageText").textContent="Page "+page+" of "+pages+" — "+list.length+" users";
+}
+window.selectUser=id=>{
+  selected=state.find(d=>d.id===id); const admin=$("role").value==="Admin";
+  const rule=selected.flag==="OVER"?"Spend is above the Space budget for this user.":selected.flag==="DUP"?"Same user has two models for the same Space — duplicate cost risk.":selected.flag==="INACTIVE"?"No usage in 30 days, but model access is still on.": "No flag on this user.";
+  $("detail").style.display="block";
+  $("detail").innerHTML=`<h3 style="margin-top:0">${selected.user} — ${selected.space} / ${selected.model}</h3><p>${rule}</p><p class="muted">${selected.note||""} Spend $${selected.spend} of $${selected.budget} budget. Access: ${selected.access?"On":"Off"}.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button ${admin?"":"disabled title='Viewer cannot change access'"} onclick="toggleAccess()">Toggle access</button><button ${admin?"":"disabled title='Viewer cannot mark reviewed'"} onclick="mark('reviewed')">Mark reviewed</button><button ${admin?"":"disabled title='Viewer cannot mark resolved'"} onclick="mark('resolved')">Mark resolved</button></div>
+  <p class="muted">Viewer role can see everything but cannot change access or mark items — Admin only.</p>`;
+};
+window.toggleAccess=()=>{selected.access=!selected.access;selectUser(selected.id);render()};
+window.mark=k=>{selected[k]=true; if(k==="resolved"){selected.flag="";} selectUser(selected.id);render()};
+$("q").addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>{page=1;render()},300)});
+["space","flag","flaggedOnly","role","fail"].forEach(id=>$(id).addEventListener("change",()=>{page=1;render()}));
+$("prev").onclick=()=>{page=Math.max(1,page-1);render()}; $("next").onclick=()=>{page++;render()};
+$("retry").onclick=()=>{$("fail").checked=false;render()}; $("reset").onclick=()=>{$("q").value="";$("space").value="";$("flag").value="";$("flaggedOnly").checked=false;page=1;render()};
+setTimeout(()=>{$("loading").style.display="none";$("app").style.display="block";render()},1200);
+</script>
+</body>
+</html>
